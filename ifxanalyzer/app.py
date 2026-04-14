@@ -37,7 +37,7 @@ def analyze_files():
     try:
         saved = []
         for f in uploaded:
-            dest = os.path.join(tmp_in, f.filename)
+            dest = os.path.join(tmp_in, os.path.basename(f.filename))
             f.save(dest)
             saved.append(dest)
 
