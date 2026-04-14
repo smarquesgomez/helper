@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IFX Analyzer — Informix Performance</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+
+<div class="app-shell">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <span class="logo-icon">⬡</span>
+      <div>
+        <div class="logo-title">IFX Analyzer</div>
+        <div class="logo-sub">Informix Performance</div>
+      </div>
+    </div>
+
+    <nav class="sidebar-nav">
+      <a href="#" class="nav-item active" data-tab="upload">
+        <span class="nav-icon">↑</span> Cargar archivos
+      </a>
+      <a href="#" class="nav-item" data-tab="results" id="nav-results" style="display:none">
+        <span class="nav-icon">◈</span> Resultados
+        <span class="nav-badge" id="alert-badge" style="display:none"></span>
+      </a>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="version-tag">v2.0</div>
+    </div>
+  </aside>
+
+  <!-- MAIN CONTENT -->
+  <main class="main-content">
+
+    <!-- UPLOAD TAB -->
+    <section class="tab-panel active" id="tab-upload">
+      <header class="panel-header">
+        <h1>Análisis de IFXCOLLECT</h1>
+        <p class="panel-desc">Seleccioná los archivos <code>onstat.*</code> generados por ifxcollect para obtener un diagnóstico automático.</p>
+      </header>
+
+      <div class="upload-zone" id="drop-zone">
+        <div class="upload-icon">⬆</div>
+        <div class="upload-title">Arrastrá los archivos aquí</div>
+        <div class="upload-sub">o hacé clic para seleccionarlos</div>
+        <div class="upload-hint">Archivos soportados: <span id="patterns-list">onstat.*</span></div>
+        <input type="file" id="file-input" multiple style="display:none">
+      </div>
+
+      <!-- File list -->
+      <div class="file-list" id="file-list" style="display:none">
+        <div class="file-list-header">
+          <span class="file-list-title">Archivos seleccionados</span>
+          <button class="btn-clear" id="btn-clear">✕ Limpiar</button>
+        </div>
+        <div id="file-items"></div>
+      </div>
+
+      <!-- Analyze button -->
+      <div class="action-row" id="action-row" style="display:none">
+        <button class="btn-analyze" id="btn-analyze">
+          <span class="btn-text">Ejecutar análisis</span>
+          <span class="btn-arrow">→</span>
+        </button>
+      </div>
+
+      <!-- Progress -->
+      <div class="progress-panel" id="progress-panel" style="display:none">
+        <div class="progress-label" id="progress-label">Analizando...</div>
+        <div class="progress-bar-wrap">
+          <div class="progress-bar" id="progress-bar"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- RESULTS TAB -->
+    <section class="tab-panel" id="tab-results">
+      <header class="panel-header">
+        <div class="results-header-row">
+          <div>
+            <h1>Resultados del análisis</h1>
+            <p class="panel-desc" id="results-desc"></p>
+          </div>
+          <button class="btn-new" id="btn-new-analysis">
+            ↺ Nuevo análisis
+          </button>
+        </div>
+      </header>
+
+      <!-- Summary cards -->
+      <div class="summary-cards" id="summary-cards"></div>
+
+      <!-- Results accordion -->
+      <div class="results-list" id="results-list"></div>
+    </section>
+
+  </main>
+</div>
+
+<script src="/static/js/app.js"></script>
+</body>
+</html>
