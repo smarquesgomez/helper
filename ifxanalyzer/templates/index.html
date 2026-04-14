@@ -21,50 +21,60 @@
         <div class="logo-sub">Informix Performance</div>
       </div>
     </div>
-
     <nav class="sidebar-nav">
       <a href="#" class="nav-item active" data-tab="upload">
         <span class="nav-icon">↑</span> Cargar archivos
       </a>
-      <a href="#" class="nav-item" data-tab="results" id="nav-results" style="display:none">
-        <span class="nav-icon">◈</span> Resultados
-        <span class="nav-badge" id="alert-badge" style="display:none"></span>
-      </a>
     </nav>
-
     <div class="sidebar-footer">
       <div class="version-tag">v2.0</div>
     </div>
   </aside>
 
-  <!-- MAIN CONTENT -->
+  <!-- MAIN -->
   <main class="main-content">
-
-    <!-- UPLOAD TAB -->
     <section class="tab-panel active" id="tab-upload">
+
       <header class="panel-header">
         <h1>Análisis de IFXCOLLECT</h1>
-        <p class="panel-desc">Seleccioná los archivos <code>onstat.*</code> generados por ifxcollect para obtener un diagnóstico automático.</p>
+        <p class="panel-desc">
+          Seleccioná la carpeta del ifxcollect o archivos <code>onstat.*</code> sueltos.
+          El analizador filtra automáticamente los que necesita y devuelve los resultados en <code>.txt</code>.
+        </p>
       </header>
 
+      <!-- Nombre de carpeta de salida -->
+      <div class="field-row">
+        <label class="field-label" for="output-name">Nombre de la carpeta de salida</label>
+        <input class="field-input" type="text" id="output-name" value="salidas_ifxcollect" placeholder="ej: galeno1_salidas">
+      </div>
+
+      <!-- Drop zone -->
       <div class="upload-zone" id="drop-zone">
         <div class="upload-icon">⬆</div>
-        <div class="upload-title">Arrastrá los archivos aquí</div>
-        <div class="upload-sub">o hacé clic para seleccionarlos</div>
-        <div class="upload-hint">Archivos soportados: <span id="patterns-list">onstat.*</span></div>
-        <input type="file" id="file-input" multiple style="display:none">
+        <div class="upload-title">Arrastrá la carpeta o los archivos aquí</div>
+        <div class="upload-sub">o usá uno de los botones</div>
+        <div class="upload-buttons">
+          <button class="btn-pick" id="btn-pick-folder">📁 Seleccionar carpeta</button>
+          <button class="btn-pick btn-pick-secondary" id="btn-pick-files">📄 Seleccionar archivos</button>
+        </div>
+        <div class="upload-hint">El analizador filtra automáticamente los archivos que necesita</div>
+        <!-- input carpeta -->
+        <input type="file" id="file-input-folder" webkitdirectory multiple style="display:none">
+        <!-- input archivos sueltos -->
+        <input type="file" id="file-input-files" multiple style="display:none">
       </div>
 
       <!-- File list -->
       <div class="file-list" id="file-list" style="display:none">
         <div class="file-list-header">
-          <span class="file-list-title">Archivos seleccionados</span>
+          <span class="file-list-title" id="file-count-label">0 archivos seleccionados</span>
           <button class="btn-clear" id="btn-clear">✕ Limpiar</button>
         </div>
         <div id="file-items"></div>
       </div>
 
-      <!-- Analyze button -->
+      <!-- Action -->
       <div class="action-row" id="action-row" style="display:none">
         <button class="btn-analyze" id="btn-analyze">
           <span class="btn-text">Ejecutar análisis</span>
@@ -79,29 +89,20 @@
           <div class="progress-bar" id="progress-bar"></div>
         </div>
       </div>
-    </section>
 
-    <!-- RESULTS TAB -->
-    <section class="tab-panel" id="tab-results">
-      <header class="panel-header">
-        <div class="results-header-row">
-          <div>
-            <h1>Resultados del análisis</h1>
-            <p class="panel-desc" id="results-desc"></p>
-          </div>
-          <button class="btn-new" id="btn-new-analysis">
-            ↺ Nuevo análisis
-          </button>
+      <!-- Result banner -->
+      <div class="result-banner" id="result-banner" style="display:none">
+        <div class="result-icon">✓</div>
+        <div class="result-text">
+          <div class="result-title">Análisis completado</div>
+          <div class="result-sub" id="result-sub">Se generaron los archivos de salida.</div>
         </div>
-      </header>
+        <a class="btn-download" id="btn-download" href="#" download>
+          ⬇ Descargar resultados (.zip)
+        </a>
+      </div>
 
-      <!-- Summary cards -->
-      <div class="summary-cards" id="summary-cards"></div>
-
-      <!-- Results accordion -->
-      <div class="results-list" id="results-list"></div>
     </section>
-
   </main>
 </div>
 

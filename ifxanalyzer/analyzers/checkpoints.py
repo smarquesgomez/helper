@@ -1,118 +1,77 @@
 from collections import Counter
-from analyzers.base import BaseAnalyzer, Finding, Severity
+from analyzers.base import BaseAnalyzer
 
 
 class CheckpointsAnalyzer(BaseAnalyzer):
-    name = "Checkpoints (onstat -g ckp)"
-    description = "Analiza triggers, tiempos y advertencias del physical log."
+    name          = "Checkpoints (onstat -g ckp)"
+    description   = "Analiza triggers, tiempos y advertencias del physical log."
+    output_file   = "salida_checkpoints.txt"
     file_patterns = ["onstat.g.ckp"]
 
-    def analyze(self, files: dict) -> list:
+    def analyze_to_file(self, files: dict, out):
         path = files.get("onstat.g.ckp")
-        if not path:
-            return []
-
         lines = self.read_file(path)
-        blocks = self.split_into_blocks(lines)
-        findings = []
+        for ctx, block in self.split_into_blocks(lines):
+            self._bloque(block, ctx, out)
 
-        for ctx, block in blocks:
-            findings.extend(self._analyze_block(block, ctx))
-
-        return findings
-
-    def _analyze_block(self, lines, ctx):
-        findings = []
+    def _bloque(self, lines, ctx, out):
         triggers, total_times = self._parse_ckp_table(lines)
-        warning = self._extract_physical_log_warning(lines)
-        prefix = f"[{ctx}] " if ctx else ""
-
+        warning = self._extract_warning(lines)
+        print("=" * 60, file=out)
+        if ctx:
+            print(ctx, file=out); print("-" * 60, file=out)
         if not total_times:
-            findings.append(Finding(
-                title=f"{prefix}Sin datos de checkpoints",
-                message="No se encontraron filas de checkpoints en onstat -g ckp.",
-                severity=Severity.INFO,
-            ))
-            return findings
+            print("No se encontraron filas de checkpoints en la salida (onstat -g ckp).", file=out)
+            print("=" * 60, file=out); print(file=out); return
 
-        # Triggers
+        print("1) Análisis de triggers de checkpoints", file=out)
+        print("-------------------------------------", file=out)
         norm = [t.upper() for t in triggers]
         counts = Counter(triggers)
         if set(norm) == {"CKPTINTVL"}:
-            findings.append(Finding(
-                title=f"{prefix}Triggers de checkpoints",
-                message="Todos los checkpoints fueron disparados por CKPTINTVL (normal).",
-                severity=Severity.OK,
-                metric=f"{len(triggers)} ckpts",
-            ))
+            print("Todos los checkpoints fueron disparados por CKPTINTVL.", file=out)
         else:
-            detalle = "\n".join(f"  {t}: {c} veces" for t, c in counts.items())
-            findings.append(Finding(
-                title=f"{prefix}Triggers no esperados",
-                message="Se encontraron triggers distintos a CKPTINTVL.",
-                severity=Severity.ALERT,
-                detail=detalle,
-            ))
+            print("Se encontraron triggers distintos a CKPTINTVL.", file=out)
+            for trig, cnt in counts.items():
+                print(f"  {trig}: {cnt} veces", file=out)
+        print(file=out)
 
-        # Tiempos
-        avg = sum(total_times) / len(total_times)
-        max_t = max(total_times)
-        sev = Severity.ALERT if max_t > 10 else (Severity.WARNING if max_t > 5 else Severity.OK)
-        findings.append(Finding(
-            title=f"{prefix}Tiempos de checkpoints",
-            message=f"Promedio: {avg:.2f}s | Máximo: {max_t:.2f}s | Total: {len(total_times)} ckpts",
-            severity=sev,
-            metric=f"máx {max_t:.1f}s",
-            detail=f"Mínimo: {min(total_times):.2f}s\nPromedio: {avg:.2f}s\nMáximo: {max_t:.2f}s",
-        ))
+        print("2) Análisis de Total Time de checkpoints", file=out)
+        print("---------------------------------------", file=out)
+        n = len(total_times)
+        print(f"Cantidad de checkpoints analizados : {n}", file=out)
+        print(f"Suma de Total Time                 : {sum(total_times):.2f} segundos", file=out)
+        print(f"Promedio de Total Time             : {sum(total_times)/n:.2f} segundos", file=out)
+        print(f"Total Time mínimo observado        : {min(total_times):.2f} segundos", file=out)
+        print(f"Total Time máximo observado        : {max(total_times):.2f} segundos", file=out)
+        print(file=out)
 
         if warning:
-            findings.append(Finding(
-                title=f"{prefix}Physical log posiblemente pequeño",
-                message="Informix detectó que el physical log podría ser demasiado chico.",
-                severity=Severity.WARNING,
-                detail=warning,
-            ))
+            print("3) Advertencia sobre tamaño del Physical Log", file=out)
+            print("-------------------------------------------", file=out)
+            print(warning, file=out); print(file=out)
 
-        return findings
+        print("=" * 60, file=out); print(file=out)
 
     def _parse_ckp_table(self, lines):
         triggers, total_times = [], []
-        header_idx = None
-        for idx, line in enumerate(lines):
-            if "Interval" in line and "Trigger" in line:
-                header_idx = idx
-                break
+        header_idx = next((i for i, l in enumerate(lines) if "Interval" in l and "Trigger" in l), None)
         if header_idx is None:
             return triggers, total_times
-        i = header_idx + 1
-        while i < len(lines):
-            s = lines[i].strip()
-            if not s or s.startswith("Max Plog"):
-                break
+        for line in lines[header_idx + 1:]:
+            s = line.strip()
+            if not s or s.startswith("Max Plog"): break
             parts = s.split()
-            if len(parts) < 5 or not parts[0].isdigit():
-                i += 1
-                continue
-            try:
-                triggers.append(parts[2])
-                total_times.append(float(parts[4]))
-            except (ValueError, IndexError):
-                pass
-            i += 1
+            if len(parts) >= 5 and parts[0].isdigit():
+                try: triggers.append(parts[2]); total_times.append(float(parts[4]))
+                except (ValueError, IndexError): pass
         return triggers, total_times
 
-    def _extract_physical_log_warning(self, lines):
-        start = None
-        for idx, line in enumerate(lines):
-            if line.strip().startswith("Based on the current workload"):
-                start = idx
-                break
-        if start is None:
-            return None
+    def _extract_warning(self, lines):
+        start = next((i for i, l in enumerate(lines) if l.strip().startswith("Based on the current workload")), None)
+        if start is None: return None
         result = []
         for j in range(start, len(lines)):
-            if j > start and not lines[j].strip():
-                break
+            if j > start and not lines[j].strip(): break
             result.append(lines[j].rstrip("\n"))
         return "\n".join(result)

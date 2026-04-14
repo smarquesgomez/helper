@@ -2,73 +2,31 @@
 BaseAnalyzer: clase base que deben heredar todos los analizadores.
 
 Para crear un nuevo analizador:
-  1. Creá un archivo .py en esta carpeta (analyzers/)
+  1. Creá un archivo .py en la carpeta analyzers/
   2. Importá BaseAnalyzer y heredá de ella
-  3. Definí los atributos de clase y el método analyze()
+  3. Definí los atributos de clase y el método analyze_to_file()
 
 Ejemplo mínimo:
-  from analyzers.base import BaseAnalyzer, Finding, Severity
+  from analyzers.base import BaseAnalyzer
 
   class MiAnalizador(BaseAnalyzer):
-      name        = "Mi Analizador"
-      description = "Qué hace este analizador"
-      file_patterns = ["onstat.g.xxx"]   # patrones de archivos que consume
+      name         = "Mi Analizador"
+      description  = "Qué hace este analizador"
+      output_file  = "salida_mi_analizador.txt"   # nombre del .txt de salida
+      file_patterns = ["onstat.g.xxx"]             # archivos que consume
 
-      def analyze(self, files: dict) -> list[Finding]:
-          # files es un dict {patron: ruta_del_archivo}
-          # retorna lista de Finding
-          findings = []
-          # ... tu lógica acá ...
-          return findings
+      def analyze_to_file(self, files: dict, out):
+          # files = {patron: ruta_absoluta}
+          # out   = file object abierto para escribir
+          path = files.get("onstat.g.xxx")
+          lines = self.read_file(path)
+          print("Mi análisis", file=out)
+          # ...
 """
 
-from dataclasses import dataclass, field
-from enum import Enum
+import os
+import sys
 from typing import Optional
-
-
-class Severity(Enum):
-    OK      = "ok"
-    WARNING = "warning"   # ATENCIÓN (amarillo)
-    ALERT   = "alert"     # ALERTA (rojo)
-    INFO    = "info"      # informativo (azul)
-
-
-@dataclass
-class Finding:
-    """Un hallazgo individual del análisis."""
-    title:    str
-    message:  str
-    severity: Severity
-    detail:   Optional[str] = None   # texto extra / tabla / raw data
-    metric:   Optional[str] = None   # valor numérico clave (ej: "75.3%")
-
-
-@dataclass
-class AnalyzerResult:
-    """Resultado completo de un analizador."""
-    analyzer_name: str
-    findings: list = field(default_factory=list)
-    raw_output: str = ""
-    error: Optional[str] = None
-
-    @property
-    def has_alerts(self):
-        return any(f.severity == Severity.ALERT for f in self.findings)
-
-    @property
-    def has_warnings(self):
-        return any(f.severity == Severity.WARNING for f in self.findings)
-
-    @property
-    def status(self):
-        if self.error:
-            return "error"
-        if self.has_alerts:
-            return "alert"
-        if self.has_warnings:
-            return "warning"
-        return "ok"
 
 
 class BaseAnalyzer:
@@ -78,31 +36,36 @@ class BaseAnalyzer:
     Atributos de clase a definir en cada subclase:
       name          (str)  : nombre legible del analizador
       description   (str)  : qué analiza
+      output_file   (str)  : nombre del archivo .txt de salida
       file_patterns (list) : prefijos de archivos que necesita
                              ej: ["onstat.g.ckp"] o ["onstat.g.act", "onstat.g.glo"]
     """
     name: str = "Analizador base"
     description: str = ""
+    output_file: str = "salida.txt"
     file_patterns: list = []
 
-    def analyze(self, files: dict) -> list:
+    def analyze_to_file(self, files: dict, out):
         """
-        Recibe un dict {patron: ruta_absoluta} con los archivos encontrados.
-        Retorna una lista de Finding.
+        Recibe un dict {patron: ruta_absoluta} y un file object para escribir.
         Debe ser implementado por cada subclase.
         """
-        raise NotImplementedError("Implementá el método analyze() en tu analizador.")
+        raise NotImplementedError("Implementá analyze_to_file() en tu analizador.")
 
-    def run(self, files: dict) -> AnalyzerResult:
-        """Ejecuta el análisis y captura errores."""
-        result = AnalyzerResult(analyzer_name=self.name)
+    def run(self, files: dict, out_dir: str) -> dict:
+        """
+        Ejecuta el análisis y escribe el .txt en out_dir.
+        Devuelve {"name", "output_file", "ok", "error"}.
+        """
+        out_path = os.path.join(out_dir, self.output_file)
         try:
-            result.findings = self.analyze(files)
+            with open(out_path, "w", encoding="utf-8") as out:
+                self.analyze_to_file(files, out)
+            return {"name": self.name, "output_file": self.output_file, "ok": True, "error": None}
         except Exception as e:
-            result.error = str(e)
-        return result
+            return {"name": self.name, "output_file": self.output_file, "ok": False, "error": str(e)}
 
-    # ---- helpers comunes ----
+    # ── Helpers comunes ───────────────────────────────────────────
 
     @staticmethod
     def read_file(path: str) -> list:

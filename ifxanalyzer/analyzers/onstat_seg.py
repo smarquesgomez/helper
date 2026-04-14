@@ -1,80 +1,63 @@
-from analyzers.base import BaseAnalyzer, Finding, Severity
+from analyzers.base import BaseAnalyzer
+
 
 class SharedMemoryAnalyzer(BaseAnalyzer):
-    name = "Shared Memory (onstat -g seg)"
-    description = "Analiza segmentos de clase V y disponibilidad de memoria compartida."
+    name          = "Shared Memory (onstat -g seg)"
+    description   = "Analiza segmentos de clase V y disponibilidad de memoria compartida."
+    output_file   = "shared_memory_onstat.g.seg.txt"
     file_patterns = ["onstat.g.seg"]
 
-    def analyze(self, files: dict) -> list:
+    def analyze_to_file(self, files: dict, out):
         path = files.get("onstat.g.seg")
-        if not path:
-            return []
         lines = self.read_file(path)
-        blocks = self.split_into_blocks(lines)
-        findings = []
-        for ctx, block in blocks:
-            findings.extend(self._analyze_block(block, ctx))
-        return findings
+        for ctx, block in self.split_into_blocks(lines):
+            self._bloque(block, ctx, out)
 
-    def _analyze_block(self, lines, ctx):
-        findings = []
+    def _bloque(self, lines, ctx, out):
         v_segs = self._parse(lines)
-        prefix = f"[{ctx}] " if ctx else ""
+        print("=" * 60, file=out)
+        if ctx:
+            print(ctx, file=out); print("-" * 60, file=out)
 
         if not v_segs:
-            findings.append(Finding(
-                title=f"{prefix}Sin segmentos V",
-                message="No se encontraron segmentos de clase V.",
-                severity=Severity.INFO,
-            ))
-            return findings
+            print("No se encontraron segmentos de clase V en la salida.", file=out)
+            print("=" * 60, file=out); print(file=out); return
 
         total_v = len(v_segs)
+        print(f"Cantidad de segmentos de clase V: {total_v}", file=out)
+        print(file=out)
+
         if total_v == 1:
             used, free = v_segs[0]
             total = used + free
             pct_free = (free / total * 100) if total > 0 else 0
-            sev = Severity.ALERT if free == 0 else (Severity.WARNING if pct_free < 5 else Severity.OK)
-            findings.append(Finding(
-                title=f"{prefix}Shared memory",
-                message=f"Segmento V: {pct_free:.1f}% libre ({free} bloques libres de {total}).",
-                severity=sev,
-                metric=f"{pct_free:.1f}% libre",
-                detail=f"blkused: {used}\nblkfree: {free}\n% libre: {pct_free:.2f}%",
-            ))
+            print(f"Segmento V único:", file=out)
+            print(f"  blkused = {used}", file=out)
+            print(f"  blkfree = {free}", file=out)
+            print(f"  Porcentaje de bloques libres: {pct_free:.2f}%", file=out)
+            if free == 0:
+                print("  ALERTA: blkfree es 0, no queda memoria libre en el segmento V.", file=out)
+            elif pct_free < 5:
+                print("  ATENCIÓN: blkfree es muy bajo, el segmento V está casi lleno.", file=out)
+            else:
+                print("  OK: aún hay memoria libre razonable en el segmento V.", file=out)
         else:
-            findings.append(Finding(
-                title=f"{prefix}Segmentos extra de memoria",
-                message=f"Hay {total_v - 1} segmento(s) V adicional(es) alocados.",
-                severity=Severity.WARNING,
-                metric=f"{total_v} segmentos",
-            ))
-        return findings
+            print(f"Segmentos extra de clase V alocados (además del primero): {total_v - 1}", file=out)
+
+        print("=" * 60, file=out); print(file=out)
 
     def _parse(self, lines):
-        v_segs = []
-        in_summary = False
-        header_seen = False
+        v_segs = []; in_summary = False; header_seen = False
         for line in lines:
             s = line.strip()
-            if s.startswith("Segment Summary:"):
-                in_summary = True
-                header_seen = False
-                continue
+            if s.startswith("Segment Summary:"): in_summary = True; header_seen = False; continue
             if in_summary:
                 if not header_seen:
-                    if s.startswith("id"):
-                        header_seen = True
+                    if s.startswith("id"): header_seen = True
                     continue
-                if not s or s.startswith("Total:"):
-                    break
+                if not s or s.startswith("Total:"): break
                 parts = s.split()
-                if len(parts) < 8:
-                    continue
-                seg_class = parts[5]
-                if seg_class.startswith("V"):
-                    try:
-                        v_segs.append((int(parts[6]), int(parts[7])))
-                    except ValueError:
-                        pass
+                if len(parts) >= 8 and parts[5].startswith("V"):
+                    try: v_segs.append((int(parts[6]), int(parts[7])))
+                    except ValueError: pass
         return v_segs

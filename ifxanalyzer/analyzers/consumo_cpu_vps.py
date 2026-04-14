@@ -1,115 +1,111 @@
-from analyzers.base import BaseAnalyzer, Finding, Severity
+from collections import Counter
+from analyzers.base import BaseAnalyzer
+
 
 class CpuVpsAnalyzer(BaseAnalyzer):
-    name = "CPU / VPs (onstat -g act/glo/rea)"
-    description = "Analiza threads activos, sesiones, Virtual Processors y threads en espera."
+    name          = "CPU / VPs (onstat -g act/glo/rea)"
+    description   = "Analiza threads activos, sesiones, Virtual Processors y threads en espera."
+    output_file   = "salida_consumo_cpu_vps.txt"
     file_patterns = ["onstat.g.act", "onstat.g.glo", "onstat.g.rea"]
 
-    def analyze(self, files: dict) -> list:
-        act_path = files.get("onstat.g.act")
-        glo_path = files.get("onstat.g.glo")
-        rea_path = files.get("onstat.g.rea")
-        if not (act_path and glo_path and rea_path):
-            return [Finding(
-                title="CPU / VPs — archivos faltantes",
-                message="Se necesitan onstat.g.act, onstat.g.glo y onstat.g.rea.",
-                severity=Severity.INFO,
-            )]
+    def analyze_to_file(self, files: dict, out):
+        act_lines = self.read_file(files.get("onstat.g.act"))
+        glo_lines = self.read_file(files.get("onstat.g.glo"))
+        rea_lines = self.read_file(files.get("onstat.g.rea"))
 
-        from collections import Counter
-        act_lines = self.read_file(act_path)
-        glo_lines = self.read_file(glo_path)
-        rea_lines = self.read_file(rea_path)
+        act_counts          = self._parse_act(act_lines)
+        sessions, threads   = self._parse_glo_mt(glo_lines)
+        vp_counts           = self._parse_vp_classes(glo_lines)
+        ready_threads       = self._parse_rea(rea_lines)
 
-        findings = []
+        print("ANÁLISIS DE CONSUMO CPU / THREADS VPS", file=out)
+        print("=" * 60, file=out); print(file=out)
 
-        # Running threads
-        in_table = False
-        counts = Counter()
-        for line in act_lines:
+        # 1) Running threads
+        print("1) onstat -g act  (threads activos 'running')", file=out)
+        print("-" * 60, file=out)
+        total_running = sum(act_counts.values())
+        print(f"Total de threads running: {total_running}", file=out); print(file=out)
+        for name, count in sorted(act_counts.items(), key=lambda x: -x[1]):
+            print(f"{count}  {name}", file=out)
+        if not act_counts:
+            print("No se encontraron threads running en la salida.", file=out)
+        print(file=out); print("=" * 60, file=out); print(file=out)
+
+        # 2) MT global info
+        print("2) onstat -g glo  (MT global info)", file=out)
+        print("-" * 60, file=out)
+        if sessions is not None and threads is not None:
+            print(f"Sessions: {sessions}", file=out)
+            print(f"Threads : {threads}", file=out)
+            if sessions > 0:
+                print(f"Threads por sesión: {threads/sessions:.2f}", file=out)
+        else:
+            print("No se pudieron leer sessions/threads de MT global info.", file=out)
+        print(file=out)
+
+        print("Detalle de VPs por clase (Individual virtual processors):", file=out)
+        if vp_counts:
+            for cls, cnt in sorted(vp_counts.items(), key=lambda x: -x[1]):
+                print(f"Clase {cls:4s}: {cnt} VP(s)", file=out)
+        else:
+            print("No se pudo leer la sección 'Individual virtual processors'.", file=out)
+        print(file=out); print("=" * 60, file=out); print(file=out)
+
+        # 3) Ready threads
+        print("3) onstat -g rea  (Ready threads)", file=out)
+        print("-" * 60, file=out)
+        print(f"Cantidad de threads en estado READY: {ready_threads}", file=out)
+        print(file=out); print("=" * 60, file=out)
+
+    def _parse_act(self, lines):
+        in_table = False; counts = Counter()
+        for line in lines:
             s = line.strip()
-            if s.startswith("Running threads:"):
-                in_table = True; continue
+            if s.startswith("Running threads:"): in_table = True; continue
             if in_table:
                 if not s: break
                 parts = s.split()
                 if len(parts) >= 7 and parts[0].isdigit() and parts[4].lower() == "running":
                     counts[parts[-1]] += 1
+        return counts
 
-        total_running = sum(counts.values())
-        detalle = "\n".join(f"  {c}  {n}" for n, c in sorted(counts.items(), key=lambda x: -x[1]))
-        findings.append(Finding(
-            title="Threads running",
-            message=f"Total de threads en estado running: {total_running}",
-            severity=Severity.INFO,
-            metric=str(total_running),
-            detail=detalle or "Ningún thread running encontrado.",
-        ))
-
-        # Sessions / Threads globales
+    def _parse_glo_mt(self, lines):
         sessions = threads = None
-        for i, line in enumerate(glo_lines):
-            if line.startswith("MT global info:"):
-                j = i + 1
-                while j < len(glo_lines) and not glo_lines[j].strip(): j += 1
-                j += 1
-                while j < len(glo_lines) and not glo_lines[j].strip(): j += 1
-                if j < len(glo_lines):
-                    data = glo_lines[j].split()
-                    if len(data) >= 2 and data[0].isdigit():
-                        sessions, threads = int(data[0]), int(data[1])
-                break
+        n = len(lines)
+        for i, line in enumerate(lines):
+            if not line.startswith("MT global info:"): continue
+            j = i + 1
+            while j < n and not lines[j].strip(): j += 1
+            j += 1
+            while j < n and not lines[j].strip(): j += 1
+            if j < n:
+                d = lines[j].split()
+                if len(d) >= 2 and d[0].isdigit():
+                    sessions, threads = int(d[0]), int(d[1])
+            break
+        return sessions, threads
 
-        if sessions is not None:
-            ratio = threads / sessions if sessions > 0 else 0
-            findings.append(Finding(
-                title="Sesiones / Threads globales",
-                message=f"Sesiones: {sessions} | Threads: {threads} | Ratio: {ratio:.2f} threads/sesión",
-                severity=Severity.INFO,
-                metric=f"{sessions} sesiones",
-            ))
-
-        # VPs por clase
-        vp_counts = Counter()
-        in_vp = False
-        for line in glo_lines:
+    def _parse_vp_classes(self, lines):
+        vp_counts = Counter(); in_vp = False
+        for line in lines:
             s = line.strip()
-            if s.startswith("Individual virtual processors:"):
-                in_vp = True; continue
+            if s.startswith("Individual virtual processors:"): in_vp = True; continue
             if in_vp:
                 if not s or s.lower().startswith("tot"): break
+                if s.lower().startswith("vp"): continue
                 parts = s.split()
                 if parts and parts[0].isdigit() and len(parts) >= 3:
                     vp_counts[parts[2]] += 1
+        return vp_counts
 
-        if vp_counts:
-            detalle_vp = "\n".join(f"  Clase {cls}: {cnt} VP(s)"
-                                    for cls, cnt in sorted(vp_counts.items(), key=lambda x: -x[1]))
-            findings.append(Finding(
-                title="Virtual Processors",
-                message=f"Total VP classes: {len(vp_counts)}",
-                severity=Severity.INFO,
-                metric=f"{sum(vp_counts.values())} VPs",
-                detail=detalle_vp,
-            ))
-
-        # Ready threads
-        ready = 0
-        in_rea = False
-        for line in rea_lines:
+    def _parse_rea(self, lines):
+        in_table = False; count = 0
+        for line in lines:
             s = line.strip()
-            if s.startswith("Ready threads:"): in_rea = True; continue
-            if in_rea:
+            if s.startswith("Ready threads:"): in_table = True; continue
+            if in_table:
                 if s.startswith("tid"): continue
                 if not s: break
-                if s.split()[0].isdigit(): ready += 1
-
-        sev = Severity.WARNING if ready > 10 else Severity.OK
-        findings.append(Finding(
-            title="Threads en estado READY",
-            message=f"Hay {ready} thread(s) en cola esperando un VP.",
-            severity=sev,
-            metric=str(ready),
-        ))
-
-        return findings
+                if s.split()[0].isdigit(): count += 1
+        return count

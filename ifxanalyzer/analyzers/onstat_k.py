@@ -1,93 +1,67 @@
 import re
 from collections import Counter
-from analyzers.base import BaseAnalyzer, Finding, Severity
+from analyzers.base import BaseAnalyzer
 
 
 class LocksAnalyzer(BaseAnalyzer):
-    name = "Locks (onstat -k)"
-    description = "Analiza tipos de locks activos y lock table overflows."
+    name          = "Locks (onstat -k)"
+    description   = "Analiza tipos de locks activos y lock table overflows."
+    output_file   = "salida_locks_onstat_k.txt"
     file_patterns = ["onstat.k"]
 
-    def analyze(self, files: dict) -> list:
+    def analyze_to_file(self, files: dict, out):
         path = files.get("onstat.k")
-        if not path:
-            return []
-
         lines = self.read_file(path)
-        blocks = self.split_into_blocks(lines)
-        findings = []
-        for ctx, block in blocks:
-            findings.extend(self._analyze_block(block, ctx))
-        return findings
+        for ctx, block in self.split_into_blocks(lines):
+            self._bloque(block, ctx, out)
 
-    def _analyze_block(self, lines, ctx):
-        findings = []
-        counts, total = self._parse_locks_table(lines)
-        overflows = self._parse_lock_summary(lines)
-        prefix = f"[{ctx}] " if ctx else ""
+    def _bloque(self, lines, ctx, out):
+        counts, total = self._parse_locks(lines)
+        overflows = self._parse_overflows(lines)
+        print("=" * 60, file=out)
+        if ctx:
+            print(ctx, file=out); print("-" * 60, file=out)
 
-        # Locks por tipo
+        print("1) Locks por tipo (columna 'type')", file=out)
+        print("----------------------------------", file=out)
         if total == 0:
-            findings.append(Finding(
-                title=f"{prefix}Locks activos",
-                message="No se encontraron locks activos.",
-                severity=Severity.INFO,
-            ))
+            print("No se encontraron filas de locks en la sección 'Locks'.", file=out)
         else:
-            detalle = "\n".join(
-                f"  {t}: {c}" for t, c in sorted(counts.items(), key=lambda x: -x[1])
-            )
-            findings.append(Finding(
-                title=f"{prefix}Locks activos",
-                message=f"Total de locks: {total}",
-                severity=Severity.INFO,
-                metric=f"{total} locks",
-                detail=detalle,
-            ))
+            print(f"Total de locks contados: {total}", file=out)
+            print("Detalle por tipo:", file=out)
+            for t, c in sorted(counts.items(), key=lambda x: -x[1]):
+                print(f"  {t}: {c}", file=out)
+        print(file=out)
 
-        # Overflows
+        print("2) Lock table overflows", file=out)
+        print("------------------------", file=out)
         if overflows is not None:
-            sev = Severity.ALERT if overflows > 0 else Severity.OK
-            msg = (f"Se registraron {overflows} lock table overflow(s)."
-                   if overflows > 0 else "No se registraron lock table overflows.")
-            findings.append(Finding(
-                title=f"{prefix}Lock table overflows",
-                message=msg,
-                severity=sev,
-                metric=str(overflows),
-            ))
+            print(f"Cantidad de lock table overflows: {overflows}", file=out)
+        else:
+            print("No se encontró la línea de resumen con 'lock table overflows'.", file=out)
 
-        return findings
+        print("=" * 60, file=out); print(file=out)
 
-    def _parse_locks_table(self, lines):
-        in_locks = False
-        header_seen = False
+    def _parse_locks(self, lines):
+        in_locks = header_seen = False
         counts = Counter()
         for line in lines:
             s = line.strip()
-            if s == "Locks":
-                in_locks = True
-                header_seen = False
-                continue
+            if s == "Locks": in_locks = True; header_seen = False; continue
             if in_locks:
                 if not header_seen:
-                    if s.startswith("address") and "type" in s:
-                        header_seen = True
+                    if s.startswith("address") and "type" in s: header_seen = True
                     continue
-                if "lock table overflows" in s:
-                    break
-                if not s:
-                    continue
+                if "lock table overflows" in s: break
+                if not s: continue
                 parts = s.split()
-                if len(parts) < 5 or parts[0] == "address":
-                    continue
-                counts[parts[4]] += 1
+                if len(parts) >= 5 and parts[0] != "address":
+                    counts[parts[4]] += 1
         return counts, sum(counts.values())
 
-    def _parse_lock_summary(self, lines):
-        pattern = re.compile(r"(\d+)\s+lock table overflows", re.IGNORECASE)
+    def _parse_overflows(self, lines):
+        p = re.compile(r"(\d+)\s+lock table overflows", re.IGNORECASE)
         for line in lines:
-            m = pattern.search(line)
-            if m:
-                return int(m.group(1))
+            m = p.search(line)
+            if m: return int(m.group(1))
         return None

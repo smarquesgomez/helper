@@ -1,32 +1,18 @@
 """
 runner.py — Orquestador central del análisis.
-Recibe una carpeta o lista de archivos, los mapea a los analizadores
-correspondientes y devuelve los resultados.
+Recibe una carpeta (con filtrado automático) o lista de archivos sueltos,
+ejecuta todos los analizadores y genera los .txt de salida.
 """
 
 import os
-import glob
-from analyzers.registry import get_all
-from analyzers.base import AnalyzerResult, Finding, Severity
-
-FILTER_PATTERNS = [
-    "onstat.g.ntd", "onstat.g.act", "onstat.g.rea",
-    "onstat.g.seg", "onstat.g.ckp", "onstat.g.glo",
-    "onstat.k", "onstat.l", "onstat.p",
-]
+import shutil
+import tempfile
+from analyzers.registry import get_all, get_required_patterns
+from core.filtrar import filtrar
 
 
-def _match_pattern(filename: str, pattern: str) -> bool:
-    return os.path.basename(filename).startswith(pattern)
-
-
-def find_files_in_folder(folder: str) -> dict:
-    """
-    Busca en la carpeta archivos que coincidan con los patrones
-    de todos los analizadores registrados.
-    Devuelve dict {pattern: ruta_absoluta}.
-    """
-    from analyzers.registry import get_required_patterns
+def _map_files(folder: str) -> dict:
+    """Mapea los archivos de una carpeta a los patrones requeridos."""
     patterns = get_required_patterns()
     found = {}
     for f in os.listdir(folder):
@@ -39,67 +25,55 @@ def find_files_in_folder(folder: str) -> dict:
     return found
 
 
-def map_files(file_list: list) -> dict:
+def run_on_folder(ifx_folder: str, out_folder: str) -> list:
     """
-    Mapea una lista de rutas de archivos a patrones conocidos.
+    Flujo 1: recibe la carpeta completa del ifxcollect.
+    - Filtra los archivos relevantes a una subcarpeta temporal
+    - Ejecuta todos los analizadores
+    - Escribe los .txt en out_folder
+    Devuelve lista de resultados {"name", "output_file", "ok", "error"}.
     """
-    from analyzers.registry import get_required_patterns
-    patterns = get_required_patterns()
-    found = {}
-    for path in file_list:
-        name = os.path.basename(path)
-        for p in patterns:
-            if name.startswith(p) and p not in found:
-                found[p] = path
-    return found
+    # Filtrar a carpeta temporal
+    tmp = tempfile.mkdtemp(prefix="ifx_filtered_")
+    try:
+        filtrar(ifx_folder, tmp)
+        return _run(tmp, out_folder)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
 
 
-def run_analysis(files: dict) -> list:
+def run_on_files(file_paths: list, out_folder: str) -> list:
     """
-    Ejecuta todos los analizadores sobre el dict de archivos.
-    Devuelve lista de AnalyzerResult.
+    Flujo 2: recibe una lista de archivos sueltos.
+    - Los copia a una carpeta temporal
+    - Ejecuta todos los analizadores
+    - Escribe los .txt en out_folder
+    Devuelve lista de resultados {"name", "output_file", "ok", "error"}.
     """
+    tmp = tempfile.mkdtemp(prefix="ifx_loose_")
+    try:
+        for path in file_paths:
+            shutil.copy2(path, tmp)
+        return _run(tmp, out_folder)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def _run(src_folder: str, out_folder: str) -> list:
+    """Ejecuta todos los analizadores sobre src_folder y escribe en out_folder."""
+    os.makedirs(out_folder, exist_ok=True)
+    files = _map_files(src_folder)
     results = []
-    analyzers = get_all()
-
-    for analyzer in analyzers:
-        # Solo ejecutar si tiene al menos un archivo requerido
-        has_any = any(p in files for p in analyzer.file_patterns)
-        if not has_any:
+    for analyzer in get_all():
+        has_files = any(p in files for p in analyzer.file_patterns)
+        if not has_files:
+            results.append({
+                "name": analyzer.name,
+                "output_file": analyzer.output_file,
+                "ok": False,
+                "error": "Archivos requeridos no encontrados: " + ", ".join(analyzer.file_patterns),
+            })
             continue
-        result = analyzer.run(files)
+        result = analyzer.run(files, out_folder)
         results.append(result)
-
     return results
-
-
-def run_on_folder(folder: str) -> list:
-    files = find_files_in_folder(folder)
-    return run_analysis(files)
-
-
-def run_on_files(file_list: list) -> list:
-    files = map_files(file_list)
-    return run_analysis(files)
-
-
-def results_to_dict(results: list) -> list:
-    """Convierte lista de AnalyzerResult a lista de dicts serializables (para JSON)."""
-    out = []
-    for r in results:
-        out.append({
-            "analyzer": r.analyzer_name,
-            "status": r.status,
-            "error": r.error,
-            "findings": [
-                {
-                    "title": f.title,
-                    "message": f.message,
-                    "severity": f.severity.value,
-                    "detail": f.detail,
-                    "metric": f.metric,
-                }
-                for f in r.findings
-            ],
-        })
-    return out
