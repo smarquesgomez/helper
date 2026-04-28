@@ -6,6 +6,7 @@ import os
 import shutil
 
 PATTERNS = [
+    "onstat.g.cluster", "onstat_g_cluster", "onstat.g.iof", "onstat_g_iof", "onstat.D", "onstat_D",
     "onstat.g.ntd", "onstat.g.act", "onstat.g.rea",
     "onstat.g.seg", "onstat.g.ckp", "onstat.g.glo",
     "onstat.k", "onstat.l", "onstat.p",

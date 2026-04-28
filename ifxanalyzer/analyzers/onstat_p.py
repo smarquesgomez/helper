@@ -4,6 +4,7 @@ from analyzers.base import BaseAnalyzer
 class OnstatPAnalyzer(BaseAnalyzer):
     name          = "Profile (onstat -p)"
     description   = "Analiza cache, commits/rollbacks, overflows, CPU, RA y deadlocks."
+    order         = 5
     output_file   = "salida_onstat.p.txt"
     file_patterns = ["onstat.p"]
 

@@ -4,6 +4,7 @@ from analyzers.base import BaseAnalyzer
 class SharedMemoryAnalyzer(BaseAnalyzer):
     name          = "Shared Memory (onstat -g seg)"
     description   = "Analiza segmentos de clase V y disponibilidad de memoria compartida."
+    order         = 2
     output_file   = "shared_memory_onstat.g.seg.txt"
     file_patterns = ["onstat.g.seg"]
 

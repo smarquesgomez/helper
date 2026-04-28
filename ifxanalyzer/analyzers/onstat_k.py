@@ -6,6 +6,7 @@ from analyzers.base import BaseAnalyzer
 class LocksAnalyzer(BaseAnalyzer):
     name          = "Locks (onstat -k)"
     description   = "Analiza tipos de locks activos y lock table overflows."
+    order         = 8
     output_file   = "salida_locks_onstat_k.txt"
     file_patterns = ["onstat.k"]
 

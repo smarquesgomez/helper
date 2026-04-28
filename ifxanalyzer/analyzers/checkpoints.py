@@ -5,6 +5,7 @@ from analyzers.base import BaseAnalyzer
 class CheckpointsAnalyzer(BaseAnalyzer):
     name          = "Checkpoints (onstat -g ckp)"
     description   = "Analiza triggers, tiempos y advertencias del physical log."
+    order         = 6
     output_file   = "salida_checkpoints.txt"
     file_patterns = ["onstat.g.ckp"]
 

@@ -11,7 +11,7 @@ from flask import Flask, request, jsonify, render_template, send_file, after_thi
 from core.runner import run_on_folder, run_on_files
 
 app = Flask(__name__)
-app.config["MAX_CONTENT_LENGTH"] = None # Sin límite
+app.config["MAX_CONTENT_LENGTH"] = None  # Sin límite de tamaño
 
 
 @app.route("/")

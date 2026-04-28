@@ -5,6 +5,7 @@ from analyzers.base import BaseAnalyzer
 class CpuVpsAnalyzer(BaseAnalyzer):
     name          = "CPU / VPs (onstat -g act/glo/rea)"
     description   = "Analiza threads activos, sesiones, Virtual Processors y threads en espera."
+    order         = 1
     output_file   = "salida_consumo_cpu_vps.txt"
     file_patterns = ["onstat.g.act", "onstat.g.glo", "onstat.g.rea"]
 

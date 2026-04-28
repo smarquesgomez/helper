@@ -5,6 +5,7 @@ from analyzers.base import BaseAnalyzer
 class LoggingAnalyzer(BaseAnalyzer):
     name          = "Logging (onstat -l)"
     description   = "Analiza physical log, logical log buffer y estado de los logical logs."
+    order         = 7
     output_file   = "salida_onstat.l.txt"
     file_patterns = ["onstat.l"]
 

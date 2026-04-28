@@ -4,6 +4,7 @@ from analyzers.base import BaseAnalyzer
 class NtdAnalyzer(BaseAnalyzer):
     name          = "Red / Clientes (onstat -g ntd)"
     description   = "Analiza conexiones de red y porcentaje de rejected por cliente."
+    order         = 4
     output_file   = "ntd_onstat.g.ntd.txt"
     file_patterns = ["onstat.g.ntd"]
 

@@ -12,6 +12,7 @@ Ejemplo mínimo:
   class MiAnalizador(BaseAnalyzer):
       name         = "Mi Analizador"
       description  = "Qué hace este analizador"
+      order        = 10
       output_file  = "salida_mi_analizador.txt"   # nombre del .txt de salida
       file_patterns = ["onstat.g.xxx"]             # archivos que consume
 
@@ -36,12 +37,14 @@ class BaseAnalyzer:
     Atributos de clase a definir en cada subclase:
       name          (str)  : nombre legible del analizador
       description   (str)  : qué analiza
+      order
       output_file   (str)  : nombre del archivo .txt de salida
       file_patterns (list) : prefijos de archivos que necesita
                              ej: ["onstat.g.ckp"] o ["onstat.g.act", "onstat.g.glo"]
     """
     name: str = "Analizador base"
     description: str = ""
+    order: int   = 99   # posición en la salida (99 = al final si no se define)
     output_file: str = "salida.txt"
     file_patterns: list = []
 
